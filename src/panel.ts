@@ -1,4 +1,5 @@
 import { Box3 } from 'three'
+import type { BackgroundController } from './background.ts'
 import type { Viewport } from './scene.ts'
 import {
   getModels,
@@ -13,11 +14,13 @@ import { buildSnippet, copyToClipboard } from './snippet.ts'
 export type PanelHooks = {
   /** Loads a model from public/models by file name. */
   addFromLibrary(fileName: string): void
+  /** Loads a backdrop from public/backgrounds by file name. */
+  setBackgroundFromLibrary(fileName: string): void
   addTestCube(): void
   removeModel(id: string): void
   clearScene(): void
-  /** Re-reads the manifest; resolves with the file names found. */
-  listLibrary(): Promise<string[]>
+  /** Re-reads the manifest; resolves with the file names found in each folder. */
+  listLibrary(): Promise<{ models: string[]; backgrounds: string[] }>
 }
 
 type Axis = 'x' | 'y' | 'z'
@@ -51,10 +54,16 @@ export type Panel = {
   refreshLibrary(): Promise<void>
 }
 
-export function createPanel(viewport: Viewport, hooks: PanelHooks): Panel {
+export function createPanel(
+  viewport: Viewport,
+  background: BackgroundController,
+  hooks: PanelHooks,
+): Panel {
   const panel = must('panel')
   const cameraReadout = must('camera-readout')
   const libraryList = must('library-list')
+  const backgroundList = must('background-list')
+  const backgroundControls = must('background-controls')
   const modelList = must('model-list')
   const selectedBody = must('selected-body')
   const copyStatus = must('copy-status')
@@ -77,27 +86,150 @@ export function createPanel(viewport: Viewport, hooks: PanelHooks): Panel {
   })
 
   // ── Library ──────────────────────────────────────────────────────────
+  function pickerRows(
+    files: string[],
+    emptyHint: string,
+    action: string,
+    onPick: (file: string) => void,
+    activeFile?: string,
+  ): HTMLElement[] {
+    if (files.length === 0) return [el('div', 'muted', emptyHint)]
+
+    return files.map((file) => {
+      const row = el('div', 'item')
+      if (file === activeFile) row.classList.add('selected')
+      row.append(el('span', 'item-name', file))
+      row.append(el('span', 'item-id', file === activeFile ? 'in use' : action))
+      row.addEventListener('click', () => onPick(file))
+      return row
+    })
+  }
+
   async function refreshLibrary(): Promise<void> {
     libraryList.replaceChildren(el('div', 'muted', 'reading public/models…'))
-    const files = await hooks.listLibrary()
+    const { models, backgrounds } = await hooks.listLibrary()
 
-    if (files.length === 0) {
-      libraryList.replaceChildren(
-        el('div', 'muted', 'public/models is empty — drop a .glb on the canvas'),
-      )
+    libraryList.replaceChildren(
+      ...pickerRows(models, 'public/models is empty — drop a .glb on the canvas', 'add', hooks.addFromLibrary),
+    )
+    backgroundList.replaceChildren(
+      ...pickerRows(
+        backgrounds,
+        'public/backgrounds is empty — drop an image on the canvas',
+        'use',
+        hooks.setBackgroundFromLibrary,
+        background.getImage()?.name,
+      ),
+    )
+  }
+
+  // ── Background controls ──────────────────────────────────────────────
+  function slider(
+    label: string,
+    value: number,
+    min: number,
+    max: number,
+    step: number,
+    format: (value: number) => string,
+    onChange: (value: number) => void,
+  ): HTMLElement {
+    const row = el('div', 'row')
+    row.append(el('span', 'slider-label', label))
+
+    const input = el('input')
+    input.type = 'range'
+    input.min = String(min)
+    input.max = String(max)
+    input.step = String(step)
+    input.value = String(value)
+
+    const readout = el('span', 'slider-value', format(value))
+    input.addEventListener('input', () => {
+      const next = Number(input.value)
+      readout.textContent = format(next)
+      onChange(next)
+    })
+
+    row.append(input, readout)
+    return row
+  }
+
+  function renderBackgroundControls(): void {
+    const image = background.getImage()
+
+    if (!image) {
+      backgroundControls.replaceChildren()
       return
     }
 
-    libraryList.replaceChildren(
-      ...files.map((file) => {
-        const row = el('div', 'item')
-        row.append(el('span', 'item-name', file))
-        row.append(el('span', 'item-id', 'add'))
-        row.addEventListener('click', () => hooks.addFromLibrary(file))
-        return row
-      }),
+    const settings = background.getSettings()
+    const nodes: HTMLElement[] = []
+
+    if (!image.loaded) {
+      nodes.push(el('div', 'warn', `re-drop ${image.name}`))
+    } else if (image.origin === 'dropped') {
+      // A dropped file has no row in the library list, so this is the only
+      // place its name appears.
+      nodes.push(el('div', 'muted', image.name))
+    }
+
+    nodes.push(
+      // Only the vertical axis is exposed. Tilting a panorama on X or Z throws
+      // the horizon off level, which is never what we want here.
+      slider(
+        'spin',
+        (settings.rotationY * 180) / Math.PI,
+        -180,
+        180,
+        1,
+        (value) => `${value.toFixed(0)}°`,
+        (value) => background.update({ rotationY: (value * Math.PI) / 180 }),
+      ),
+      slider('blur', settings.blur, 0, 1, 0.01, (value) => value.toFixed(2), (value) =>
+        background.update({ blur: value }),
+      ),
+      slider('bright', settings.intensity, 0, 3, 0.05, (value) => value.toFixed(2), (value) =>
+        background.update({ intensity: value }),
+      ),
     )
+
+    const lightingRow = el('div', 'row')
+    const lighting = el('input')
+    lighting.type = 'checkbox'
+    lighting.id = 'background-lighting'
+    lighting.checked = settings.lighting
+    lighting.addEventListener('change', () => background.update({ lighting: lighting.checked }))
+
+    const lightingLabel = el('label', undefined, 'light the models with it')
+    lightingLabel.htmlFor = lighting.id
+    lightingLabel.style.cursor = 'pointer'
+
+    lightingRow.append(lighting, lightingLabel)
+    lightingRow.style.marginTop = '6px'
+    nodes.push(lightingRow)
+
+    backgroundControls.replaceChildren(...nodes)
   }
+
+  function markActiveBackground(): void {
+    const activeName = background.getImage()?.name
+    for (const row of backgroundList.querySelectorAll('.item')) {
+      const name = row.querySelector('.item-name')?.textContent
+      const isActive = name === activeName
+      row.classList.toggle('selected', isActive)
+      const action = row.querySelector('.item-id')
+      if (action) action.textContent = isActive ? 'in use' : 'use'
+    }
+  }
+
+  must<HTMLButtonElement>('background-clear').addEventListener('click', () => background.clear())
+  // Rebuilt wholesale rather than patched, so a restored session shows the saved
+  // slider positions without a separate sync path.
+  background.subscribe(() => {
+    renderBackgroundControls()
+    markActiveBackground()
+  })
+  renderBackgroundControls()
 
   must<HTMLButtonElement>('library-refresh').addEventListener('click', () => void refreshLibrary())
   must<HTMLButtonElement>('add-cube').addEventListener('click', () => hooks.addTestCube())
@@ -238,7 +370,7 @@ export function createPanel(viewport: Viewport, hooks: PanelHooks): Panel {
 
   // ── Output ───────────────────────────────────────────────────────────
   must<HTMLButtonElement>('copy-snippet').addEventListener('click', async () => {
-    const snippet = buildSnippet(viewport)
+    const snippet = buildSnippet(viewport, background)
     try {
       await copyToClipboard(snippet)
       copyStatus.textContent = `copied ${getModels().length} model(s) + camera`

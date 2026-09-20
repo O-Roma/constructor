@@ -40,6 +40,7 @@ Everything in `src/` is flat, one concern per file:
 | `scene.ts` | Renderer, camera, lights, grid, OrbitControls, render loop. |
 | `scene-store.ts` | The list of placed models and which one is selected. |
 | `loader.ts` | GLTFLoader wrapper, ground placement, unit sanity check, disposal. |
+| `background.ts` | The backdrop image: loading, spin, blur, brightness, image-based lighting. |
 | `transform.ts` | TransformControls gizmo, click-to-select raycasting, hotkeys. |
 | `panel.ts` | The side panel: camera readout, library, model list, numeric fields. |
 | `snippet.ts` | Scene state → the copyable TypeScript block. |
@@ -53,14 +54,15 @@ why the gizmo and the number fields can't drift apart. If you are ever tempted t
 transform in the store, don't — the only exception is `savedTransform`, which exists
 purely for rows whose object is gone.
 
-## Models
+## Assets
 
-Drop `.glb` / `.gltf` files into `public/models/`. A small Vite plugin in
-`vite.config.ts` serves that directory listing at `/models-manifest.json`, in dev from
-disk on every request and in a build as an emitted file — so a model copied in mid-session
-appears in the library after hitting ↻, with no restart and no manifest to maintain.
+Drop `.glb` / `.gltf` models into `public/models/` and backdrop images
+(`.jpg`, `.png`, `.webp`, `.avif`, `.hdr`) into `public/backgrounds/`. A small Vite plugin
+in `vite.config.ts` serves both directory listings at `/asset-manifest.json`, in dev from
+disk on every request and in a build as an emitted file — so a file copied in mid-session
+appears in the panel after hitting ↻, with no restart and no manifest to maintain.
 
-Model files are **git-ignored**: they are large binaries and usually still in flux.
+Asset files are **git-ignored**: they are large binaries and usually still in flux.
 
 You can also drag a file straight onto the canvas. Those load from a blob URL, which dies
 with the page, so after a reload they come back as a greyed "re-drop X" row that still
@@ -70,6 +72,26 @@ Models load at **native scale**. Auto-fitting each one (as situ-web does for its
 model) would destroy the relative sizes between garments, which is most of what we are
 trying to judge here. A model whose largest dimension is above 50 or below 0.05 gets a
 unit warning in the panel instead.
+
+## The background
+
+The backdrop is an **equirectangular panorama on `scene.background`**. That is three's own
+inside-of-a-sphere rendering: the renderer draws the image on a sphere that follows the
+camera, so it fills the viewport at any aspect ratio and can never be clipped or walked
+through — which is exactly what a real inverted sphere mesh of some fixed radius would do
+the moment a model or the camera went past it. There is deliberately **no sphere mesh** in
+the scene; don't add one.
+
+A normal (non-360) photo works fine and simply gets stretched around the sphere.
+
+The panel exposes spin, blur, brightness, and a "light the models with it" toggle. That
+toggle also assigns the texture to `scene.environment`; the renderer converts the
+equirectangular texture to the cubemap that image-based lighting needs, so one texture
+serves both roles.
+
+Only the **Y axis** of the rotation is exposed. Tilting a panorama on X or Z throws the
+horizon off level, which is never what we want here — the snippet still emits a full
+`[0, y, 0]` triple so the real site can consume it directly.
 
 ## Hotkeys
 

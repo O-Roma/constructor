@@ -1,3 +1,4 @@
+import type { BackgroundController, BackgroundOrigin, BackgroundSettings } from './background.ts'
 import type { Viewport } from './scene.ts'
 import { getModels, type ModelOrigin, type Transform } from './scene-store.ts'
 import { readTransform } from './snippet.ts'
@@ -13,6 +14,13 @@ export type SavedModel = {
   visible: boolean
 }
 
+export type SavedBackground = {
+  name: string
+  src: string
+  origin: BackgroundOrigin
+  settings: BackgroundSettings
+}
+
 export type SavedScene = {
   camera: {
     position: [number, number, number]
@@ -20,6 +28,7 @@ export type SavedScene = {
     fov: number
   }
   models: SavedModel[]
+  background: SavedBackground | null
 }
 
 /**
@@ -28,10 +37,14 @@ export type SavedScene = {
  * cannot, because a blob URL dies with the page — those return as placeholder
  * rows holding their transform until the file is re-dropped.
  */
-export function saveScene(viewport: Viewport): void {
+export function saveScene(viewport: Viewport, background: BackgroundController): void {
   const { camera, controls } = viewport
+  const image = background.getImage()
 
   const scene: SavedScene = {
+    background: image
+      ? { name: image.name, src: image.src, origin: image.origin, settings: background.getSettings() }
+      : null,
     camera: {
       position: [camera.position.x, camera.position.y, camera.position.z],
       target: [controls.target.x, controls.target.y, controls.target.z],
@@ -84,13 +97,13 @@ export function clearSavedScene(): void {
  * pushing the write into the future and never save at all while the render loop
  * is running.
  */
-export function createAutosave(viewport: Viewport): () => void {
+export function createAutosave(viewport: Viewport, background: BackgroundController): () => void {
   let dirty = false
 
   setInterval(() => {
     if (!dirty) return
     dirty = false
-    saveScene(viewport)
+    saveScene(viewport, background)
   }, 1000)
 
   return () => {

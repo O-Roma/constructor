@@ -261,6 +261,30 @@
         border-color: var(--accent);
       }
 
+      input[type='range'] {
+        flex: 1 1 auto;
+        min-width: 0;
+        accent-color: var(--accent);
+        height: 14px;
+      }
+
+      input[type='checkbox'] {
+        accent-color: var(--accent);
+        margin: 0;
+      }
+
+      .slider-label {
+        flex: 0 0 52px;
+        color: var(--muted);
+        font-size: 10px;
+      }
+
+      .slider-value {
+        flex: 0 0 42px;
+        text-align: right;
+        font-size: 10px;
+      }
+
       /* ── Drop hint ─────────────────────────────────────────────────── */
 
       #drop-hint {
@@ -307,7 +331,7 @@
   <body>
     <canvas id="viewport"></canvas>
 
-    <div id="drop-hint">drop a .glb or .gltf</div>
+    <div id="drop-hint">drop a .glb model or an image backdrop</div>
 
     <div id="panel">
       <header id="panel-head">
@@ -330,6 +354,15 @@
           <div class="row" style="margin-top: 6px">
             <button id="add-cube">Add test cube</button>
           </div>
+        </section>
+
+        <section>
+          <div class="row spread">
+            <h2>Background</h2>
+            <button id="background-clear" class="icon" title="Remove the backdrop">×</button>
+          </div>
+          <div id="background-list"></div>
+          <div id="background-controls"></div>
         </section>
 
         <section>

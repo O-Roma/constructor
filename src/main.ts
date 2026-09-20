@@ -1,3 +1,4 @@
+import { createBackground } from './background.ts'
 import { createPanel, type PanelHooks } from './panel.ts'
 import { applyCamera, applyTransform, clearSavedScene, createAutosave, loadScene } from './persist.ts'
 import { createTestCube, describeUnits, disposeObject, loadGltf, nextSpot, placeOnGround } from './loader.ts'
@@ -16,13 +17,15 @@ import {
 } from './scene-store.ts'
 
 const MODELS_URL_PREFIX = '/models/'
-const MANIFEST_URL = '/models-manifest.json'
+const BACKGROUNDS_URL_PREFIX = '/backgrounds/'
+const MANIFEST_URL = '/asset-manifest.json'
 
 const canvas = document.getElementById('viewport')
 if (!(canvas instanceof HTMLCanvasElement)) throw new Error('missing #viewport canvas')
 
 const viewport = createViewport(canvas)
-const autosave = createAutosave(viewport)
+const background = createBackground(viewport)
+const autosave = createAutosave(viewport, background)
 
 // ── Adding models ──────────────────────────────────────────────────────
 
@@ -70,6 +73,30 @@ function addDroppedFile(file: File): void {
   void addGltf(file.name, src, url, 'dropped').finally(() => URL.revokeObjectURL(url))
 }
 
+/**
+ * `src` is the path the snippet emits; `url` is what we actually fetch. They
+ * differ for a dropped file, whose bytes only exist as a blob in this tab.
+ */
+function setBackground(name: string, src: string, url: string, origin: 'library' | 'dropped'): void {
+  background.set({ name, src, origin }, url).catch((error: unknown) => {
+    console.error(`could not load backdrop ${name}`, error)
+    window.alert(`Could not load ${name}. See the console for details.`)
+  })
+}
+
+function setBackgroundFromLibrary(fileName: string): void {
+  const src = BACKGROUNDS_URL_PREFIX + encodeURIComponent(fileName)
+  setBackground(fileName, src, src, 'library')
+}
+
+function setDroppedBackground(file: File): void {
+  const url = URL.createObjectURL(file)
+  const src = BACKGROUNDS_URL_PREFIX + encodeURIComponent(file.name)
+  setBackground(file.name, src, url, 'dropped')
+  // Not revoked immediately: unlike a GLTF, which is fully parsed into geometry
+  // by the time the promise settles, the texture keeps reading from this URL.
+}
+
 function addTestCube(): void {
   const object = createTestCube()
   const [x, z] = nextSpot(getModels().length)
@@ -102,26 +129,32 @@ createTransformTools(viewport, () => {
   if (selected) removeById(selected.id)
 })
 
+function stringList(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
+}
+
 const hooks: PanelHooks = {
   addFromLibrary,
+  setBackgroundFromLibrary,
   addTestCube,
   removeModel: removeById,
   clearScene,
   async listLibrary() {
     try {
       const response = await fetch(MANIFEST_URL, { cache: 'no-store' })
-      if (!response.ok) return []
-      const files = (await response.json()) as unknown
-      return Array.isArray(files) ? files.filter((file): file is string => typeof file === 'string') : []
+      if (!response.ok) return { models: [], backgrounds: [] }
+      const manifest = (await response.json()) as { models?: unknown; backgrounds?: unknown }
+      return { models: stringList(manifest.models), backgrounds: stringList(manifest.backgrounds) }
     } catch {
-      return []
+      return { models: [], backgrounds: [] }
     }
   },
 }
 
-const panel = createPanel(viewport, hooks)
+const panel = createPanel(viewport, background, hooks)
 
 subscribe(autosave)
+background.subscribe(autosave)
 viewport.controls.addEventListener('change', autosave)
 // A gizmo drag mutates the object directly, so nothing in the store fires —
 // save off the render loop instead, which the debounce keeps cheap.
@@ -130,6 +163,7 @@ viewport.onFrame(autosave)
 // ── Drag & drop ────────────────────────────────────────────────────────
 
 const MODEL_EXT = /\.(glb|gltf)$/i
+const IMAGE_EXT = /\.(jpe?g|png|webp|avif|hdr)$/i
 
 window.addEventListener('dragover', (event) => {
   event.preventDefault()
@@ -145,9 +179,12 @@ window.addEventListener('drop', (event) => {
   event.preventDefault()
   document.body.classList.remove('dragging')
 
-  const files = [...(event.dataTransfer?.files ?? [])].filter((file) => MODEL_EXT.test(file.name))
-  if (files.length === 0) return
-  for (const file of files) addDroppedFile(file)
+  const files = [...(event.dataTransfer?.files ?? [])]
+  for (const file of files) {
+    if (MODEL_EXT.test(file.name)) addDroppedFile(file)
+    // Only the last image wins — there is one backdrop.
+    else if (IMAGE_EXT.test(file.name)) setDroppedBackground(file)
+  }
 })
 
 // ── Restore the previous session ───────────────────────────────────────
@@ -155,6 +192,21 @@ window.addEventListener('drop', (event) => {
 const saved = loadScene()
 if (saved) {
   applyCamera(viewport, saved.camera)
+
+  if (saved.background) {
+    const { name, src, origin, settings } = saved.background
+    if (origin === 'library') {
+      background.set({ name, src, origin }, src).then(
+        () => background.update(settings),
+        // Renamed or deleted since we saved — keep the settings so the sliders
+        // are not reset to nothing.
+        () => background.setMissing({ name, src, origin }, settings),
+      )
+    } else {
+      // A dropped image's blob URL died with the page.
+      background.setMissing({ name, src, origin }, settings)
+    }
+  }
 
   for (const entry of saved.models) {
     if (entry.origin === 'library') {
