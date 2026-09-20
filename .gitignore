@@ -1,0 +1,10 @@
+node_modules/
+dist/
+.env
+*.local
+notes.md
+
+# Models are big binaries and usually come from whoever is designing them.
+# Keep them out of git until we know which ones are final.
+public/models/*
+!public/models/.gitkeep
