@@ -82,9 +82,22 @@ through — which is exactly what a real inverted sphere mesh of some fixed radi
 the moment a model or the camera went past it. There is deliberately **no sphere mesh** in
 the scene; don't add one.
 
-A normal (non-360) photo works fine and simply gets stretched around the sphere.
+An ordinary (non-360) photo is refitted first, in `fitToEquirect`. Handing a 4:3 photo
+straight to three squashes it into the 2:1 band and drags its horizon far above eye level
+— a beach shot then shows nothing but sand until you orbit upwards. Instead the photo
+keeps its aspect ratio across the full 360°, and the **horizon** slider moves it
+vertically so its real skyline can be put on the viewer's eye line. The poles are filled
+by stretching the photo's own top and bottom rows, which reads as sky and ground rather
+than the hard seam you get when the image runs out. A true 2:1 panorama skips all of this
+and the slider is hidden.
 
-The panel exposes spin, blur, brightness, and a "light the models with it" toggle. That
+The fitted canvas is sized from the source and never upscales it: the same texture feeds
+the cubemap conversion behind image-based lighting, and that gets expensive fast.
+
+`DEFAULT_BACKGROUND` in `main.ts` is what a fresh session opens on, with the horizon
+offset that suits that particular photo.
+
+The panel also exposes spin, blur, brightness, and a "light the models with it" toggle. That
 toggle also assigns the texture to `scene.environment`; the renderer converts the
 equirectangular texture to the cubemap that image-based lighting needs, so one texture
 serves both roles.

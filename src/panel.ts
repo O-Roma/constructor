@@ -132,6 +132,7 @@ export function createPanel(
     step: number,
     format: (value: number) => string,
     onChange: (value: number) => void,
+    onRelease = false,
   ): HTMLElement {
     const row = el('div', 'row')
     row.append(el('span', 'slider-label', label))
@@ -147,8 +148,10 @@ export function createPanel(
     input.addEventListener('input', () => {
       const next = Number(input.value)
       readout.textContent = format(next)
-      onChange(next)
+      // The readout still tracks the drag; only the expensive work waits.
+      if (!onRelease) onChange(next)
     })
+    if (onRelease) input.addEventListener('change', () => onChange(Number(input.value)))
 
     row.append(input, readout)
     return row
@@ -185,6 +188,26 @@ export function createPanel(
         (value) => `${value.toFixed(0)}°`,
         (value) => background.update({ rotationY: (value * Math.PI) / 180 }),
       ),
+    )
+
+    // A true 2:1 panorama already has its horizon in the right place; the
+    // slider would only break it.
+    if (!image.panoramic) {
+      nodes.push(
+        slider(
+          'horizon',
+          settings.horizon,
+          -0.5,
+          0.5,
+          0.01,
+          (value) => `${(value * 100).toFixed(0)}%`,
+          (value) => background.update({ horizon: value }),
+          true,
+        ),
+      )
+    }
+
+    nodes.push(
       slider('blur', settings.blur, 0, 1, 0.01, (value) => value.toFixed(2), (value) =>
         background.update({ blur: value }),
       ),

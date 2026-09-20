@@ -98,6 +98,7 @@ function backgroundLines(background: BackgroundController): string[] {
   lines.push(
     `  rotation: ${vec([0, settings.rotationY, 0])}, // degrees: ${degrees([0, settings.rotationY, 0])}`,
   )
+  if (!image.panoramic) lines.push(`  horizon: ${num(settings.horizon)},`)
   lines.push(`  blur: ${num(settings.blur)},`)
   lines.push(`  intensity: ${num(settings.intensity)},`)
   lines.push(`  lighting: ${settings.lighting},`)

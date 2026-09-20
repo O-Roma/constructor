@@ -16,6 +16,13 @@ import {
   type SceneModel,
 } from './scene-store.ts'
 
+/**
+ * What a fresh session opens on. `playa.jpeg` is an ordinary 4:3 photo rather
+ * than a 360° panorama, so its skyline sits well above the viewer until the
+ * horizon offset pulls it down to eye level — hence the value here.
+ */
+const DEFAULT_BACKGROUND = { file: 'playa.jpeg', horizon: 0.42 }
+
 const MODELS_URL_PREFIX = '/models/'
 const BACKGROUNDS_URL_PREFIX = '/backgrounds/'
 const MANIFEST_URL = '/asset-manifest.json'
@@ -240,4 +247,13 @@ if (saved) {
   }
 
   void panel.refreshLibrary()
+} else {
+  // Nothing saved yet, so open on the default backdrop. It is skipped silently
+  // when the file is not there, since the library is git-ignored and a fresh
+  // clone has none of it.
+  const src = BACKGROUNDS_URL_PREFIX + DEFAULT_BACKGROUND.file
+  background
+    .set({ name: DEFAULT_BACKGROUND.file, src, origin: 'library' }, src)
+    .then(() => background.update({ horizon: DEFAULT_BACKGROUND.horizon }))
+    .catch(() => background.clear())
 }
