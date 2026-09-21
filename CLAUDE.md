@@ -73,6 +73,26 @@ model) would destroy the relative sizes between garments, which is most of what 
 trying to judge here. A model whose largest dimension is above 50 or below 0.05 gets a
 unit warning in the panel instead.
 
+## Sizing models
+
+Models arrive at native scale, so the panel shows **size** — the largest of the model's
+exported width/height/depth multiplied by its scale, in metres — above the raw scale
+factors. A scale of `1.4` only means something if you remember what the model was
+exported at; `1.5 m` does not need that. Typing in the field rescales the model so its
+largest dimension measures what you typed.
+
+`measureLocal` in `loader.ts` neutralises the root transform before measuring, because
+`Box3.setFromObject` works in world space and would otherwise report a model as growing
+when it is merely rotated.
+
+**Lock proportions** (on by default, `L`) keeps the three scale axes in step: a gizmo
+scale drag on any handle applies the ratio of the axis that moved furthest to all three,
+and typing in one scale field does the same. Non-uniform scaling is still available with
+the lock off, but stretching a garment on one axis is nearly always a mistake.
+
+Scaling happens about the object's origin, so a resized model usually needs **Sit on
+ground** afterwards.
+
 ## The background
 
 The backdrop is an **equirectangular panorama on `scene.background`**. That is three's own
@@ -108,8 +128,8 @@ horizon off level, which is never what we want here — the snippet still emits 
 
 ## Hotkeys
 
-`W` / `E` / `R` translate · rotate · scale · `X` world/local · `G` grid · `Esc` deselect ·
-`Del` remove · `H` hide the panel.
+`W` / `E` / `R` translate · rotate · scale · `X` world/local · `L` lock proportions ·
+`G` grid · `Esc` deselect · `Del` remove · `H` hide the panel.
 
 ## Conventions
 

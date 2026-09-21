@@ -1,10 +1,18 @@
 import * as THREE from 'three'
 import { TransformControls } from 'three/examples/jsm/controls/TransformControls.js'
+import { measureLocal } from './loader.ts'
 import type { Viewport } from './scene.ts'
 import { getModels, getSelected, select, subscribe } from './scene-store.ts'
 
 export type TransformTools = {
   gizmo: TransformControls
+  /** While on, a scale drag or a typed scale value changes all three axes together. */
+  isProportional(): boolean
+  setProportional(value: boolean): void
+  /** Lets the panel checkbox follow the L hotkey. */
+  onProportionalChange(listener: (value: boolean) => void): () => void
+  /** Scales the object so its largest dimension measures `metres`. */
+  resize(object: THREE.Object3D, metres: number): void
 }
 
 /** How far the pointer may travel and still count as a click rather than an orbit. */
@@ -23,6 +31,45 @@ export function createTransformTools(viewport: Viewport, onRemoveSelected: () =>
   // placement impossible.
   gizmo.addEventListener('dragging-changed', (event) => {
     controls.enabled = !(event.value as boolean)
+  })
+
+  // ── Proportional scaling ─────────────────────────────────────────────
+  // On by default: a garment stretched on one axis only is almost always a
+  // mistake, and the axis handles are far easier to grab than the centre box
+  // that scales uniformly.
+  let proportional = true
+  const proportionalListeners = new Set<(value: boolean) => void>()
+
+  function setProportional(value: boolean): void {
+    if (proportional === value) return
+    proportional = value
+    for (const listener of proportionalListeners) listener(value)
+  }
+
+  // Captured on pointer-down because TransformControls recomputes the scale from
+  // its own start value on every move; overriding the result is therefore safe
+  // and never compounds.
+  const scaleAtDragStart = new THREE.Vector3()
+  gizmo.addEventListener('mouseDown', () => {
+    if (gizmo.object) scaleAtDragStart.copy(gizmo.object.scale)
+  })
+
+  gizmo.addEventListener('objectChange', () => {
+    const object = gizmo.object
+    if (!proportional || gizmo.mode !== 'scale' || !object) return
+
+    // Whichever handle was grabbed, the axis that has moved furthest from where
+    // the drag started is the one the user is expressing; the others follow it
+    // by the same ratio, so the proportions survive.
+    let ratio = 1
+    for (const axis of ['x', 'y', 'z'] as const) {
+      const from = scaleAtDragStart[axis]
+      if (from === 0) continue
+      const candidate = object.scale[axis] / from
+      if (Math.abs(Math.log(candidate)) > Math.abs(Math.log(ratio))) ratio = candidate
+    }
+
+    object.scale.copy(scaleAtDragStart).multiplyScalar(ratio)
   })
 
   subscribe(() => {
@@ -77,6 +124,9 @@ export function createTransformTools(viewport: Viewport, onRemoveSelected: () =>
       case 'r':
         gizmo.setMode('scale')
         break
+      case 'l':
+        setProportional(!proportional)
+        break
       case 'x':
         gizmo.setSpace(gizmo.space === 'world' ? 'local' : 'world')
         break
@@ -98,7 +148,22 @@ export function createTransformTools(viewport: Viewport, onRemoveSelected: () =>
     }
   })
 
-  return { gizmo }
+  return {
+    gizmo,
+    isProportional: () => proportional,
+    setProportional,
+    onProportionalChange(listener) {
+      proportionalListeners.add(listener)
+      return () => proportionalListeners.delete(listener)
+    },
+    resize(object, metres) {
+      const size = measureLocal(object).multiply(object.scale)
+      const largest = Math.max(size.x, size.y, size.z)
+      if (!Number.isFinite(largest) || largest <= 0 || metres <= 0) return
+      // Multiplying keeps any deliberate non-uniform scale intact.
+      object.scale.multiplyScalar(metres / largest)
+    },
+  }
 }
 
 /**

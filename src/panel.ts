@@ -1,6 +1,8 @@
-import { Box3 } from 'three'
+import { Box3, Vector3 } from 'three'
 import type { BackgroundController } from './background.ts'
+import { measureLocal } from './loader.ts'
 import type { Viewport } from './scene.ts'
+import type { TransformTools } from './transform.ts'
 import {
   getModels,
   getSelected,
@@ -57,6 +59,7 @@ export type Panel = {
 export function createPanel(
   viewport: Viewport,
   background: BackgroundController,
+  tools: TransformTools,
   hooks: PanelHooks,
 ): Panel {
   const panel = must('panel')
@@ -309,6 +312,23 @@ export function createPanel(
   // Rebuilt only when the selection changes; the values are written every frame
   // by updateFields so a gizmo drag is reflected live.
   let fields: Array<{ input: HTMLInputElement; channel: Channel; axis: Axis }> = []
+  // The model's exported width/height/depth, measured once per selection since
+  // geometry never changes under us. Multiplied by the scale it gives the size
+  // the model currently reads as in the scene.
+  let baseSize: Vector3 | null = null
+  let sizeInput: HTMLInputElement | null = null
+  let lockBox: HTMLInputElement | null = null
+
+  function currentSize(object: { scale: Vector3 }): number {
+    if (!baseSize) return 0
+    const scaled = baseSize.clone().multiply(object.scale)
+    return Math.max(scaled.x, scaled.y, scaled.z)
+  }
+
+  // The hotkey and the checkbox are two views of the same switch.
+  tools.onProportionalChange((value) => {
+    if (lockBox) lockBox.checked = value
+  })
 
   function renderSelected(): void {
     const selected = getSelected()
@@ -320,11 +340,34 @@ export function createPanel(
     }
 
     const object = selected.object
+    baseSize = measureLocal(object)
+    sizeInput = null
+    lockBox = null
     const nodes: HTMLElement[] = [el('div', 'muted', `${selected.name}  ·  ${selected.id}`)]
 
     if (selected.unitWarning) {
       nodes.push(el('div', 'warn', `⚠ ${selected.unitWarning}`))
     }
+
+    // Size before the raw scale factors: how many metres across a garment is
+    // the question we are actually asking, and a scale of 1.4 answers it only if
+    // you already remember what the model was exported at.
+    const sizeGroup = el('div', 'field compact')
+    sizeGroup.append(el('label', undefined, 'size'))
+
+    const size = el('input')
+    size.type = 'number'
+    size.step = '0.05'
+    size.min = '0'
+    size.title = 'Largest dimension in metres — typing here rescales the whole model'
+    size.addEventListener('input', () => {
+      const typed = Number(size.value)
+      if (!Number.isFinite(typed) || typed <= 0) return
+      tools.resize(object, typed)
+    })
+    sizeGroup.append(size, el('span', 'unit', 'm'))
+    sizeInput = size
+    nodes.push(sizeGroup)
 
     for (const channel of ['position', 'rotation', 'scale'] as Channel[]) {
       const group = el('div', 'field')
@@ -339,6 +382,16 @@ export function createPanel(
         input.addEventListener('input', () => {
           const typed = Number(input.value)
           if (!Number.isFinite(typed)) return
+
+          if (channel === 'scale' && tools.isProportional()) {
+            const previous = object.scale[axis]
+            // Applied as a ratio so the other two axes keep whatever relative
+            // proportion they already had.
+            if (previous > 0) object.scale.multiplyScalar(typed / previous)
+            else object.scale.set(typed, typed, typed)
+            return
+          }
+
           // Rotation is shown in degrees because that is what a person reasons
           // about, but three stores radians.
           object[channel][axis] = channel === 'rotation' ? (typed * Math.PI) / 180 : typed
@@ -351,6 +404,22 @@ export function createPanel(
       nodes.push(group)
     }
 
+    const lock = el('input')
+    lock.type = 'checkbox'
+    lock.id = 'lock-proportions'
+    lock.checked = tools.isProportional()
+    lock.addEventListener('change', () => tools.setProportional(lock.checked))
+    lockBox = lock
+
+    const lockLabel = el('label', undefined, 'lock proportions')
+    lockLabel.htmlFor = lock.id
+    lockLabel.style.cursor = 'pointer'
+
+    const lockRow = el('div', 'row')
+    lockRow.style.marginTop = '6px'
+    lockRow.append(lock, lockLabel)
+    nodes.push(lockRow)
+
     const ground = el('button', undefined, 'Sit on ground')
     ground.title = 'Drop it so its lowest point touches y = 0'
     ground.addEventListener('click', () => {
@@ -360,9 +429,13 @@ export function createPanel(
       object.position.y -= new Box3().setFromObject(object).min.y
     })
 
+    const reset = el('button', undefined, 'Reset size')
+    reset.title = 'Back to the scale the model was exported at'
+    reset.addEventListener('click', () => object.scale.set(1, 1, 1))
+
     const row = el('div', 'row')
     row.style.marginTop = '6px'
-    row.append(ground)
+    row.append(ground, reset)
     nodes.push(row)
 
     selectedBody.replaceChildren(...nodes)
@@ -378,6 +451,10 @@ export function createPanel(
       if (document.activeElement === input) continue
       const raw = object[channel][axis]
       input.value = fmt(channel === 'rotation' ? (raw * 180) / Math.PI : raw)
+    }
+
+    if (sizeInput && document.activeElement !== sizeInput) {
+      sizeInput.value = fmt(currentSize(object))
     }
   }
 

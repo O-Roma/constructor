@@ -226,6 +226,16 @@
         align-items: center;
       }
 
+      /* One value plus its unit, rather than three axes. */
+      .field.compact {
+        grid-template-columns: 34px 1fr auto;
+      }
+
+      .unit {
+        color: var(--muted);
+        font-size: 10px;
+      }
+
       .field + .field {
         margin-top: 4px;
       }
@@ -387,7 +397,7 @@
 
     <div id="hint">
       <kbd>W</kbd>/<kbd>E</kbd>/<kbd>R</kbd> move · rotate · scale &nbsp;
-      <kbd>X</kbd> world/local &nbsp; <kbd>G</kbd> grid<br />
+      <kbd>X</kbd> world/local &nbsp; <kbd>L</kbd> lock proportions &nbsp; <kbd>G</kbd> grid<br />
       <kbd>Esc</kbd> deselect &nbsp; <kbd>Del</kbd> remove &nbsp; <kbd>H</kbd> hide panel
     </div>
 

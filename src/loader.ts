@@ -55,6 +55,35 @@ export function nextSpot(index: number): [number, number] {
   return [Math.cos(angle) * radius, Math.sin(angle) * radius]
 }
 
+/**
+ * The model's own width, height and depth, ignoring its current transform.
+ *
+ * `Box3.setFromObject` measures in world space, so it grows when the model is
+ * rotated and shrinks when it is scaled — useless as a stable reading of how big
+ * the garment is. Neutralising the root transform for the measurement gives the
+ * size the model was exported at, which multiplied by the scale is the size we
+ * actually want to show.
+ */
+export function measureLocal(object: THREE.Object3D): THREE.Vector3 {
+  const position = object.position.clone()
+  const quaternion = object.quaternion.clone()
+  const scale = object.scale.clone()
+
+  object.position.set(0, 0, 0)
+  object.quaternion.identity()
+  object.scale.set(1, 1, 1)
+  object.updateWorldMatrix(true, true)
+
+  const size = new THREE.Box3().setFromObject(object).getSize(new THREE.Vector3())
+
+  object.position.copy(position)
+  object.quaternion.copy(quaternion)
+  object.scale.copy(scale)
+  object.updateWorldMatrix(true, true)
+
+  return size
+}
+
 /** Scratch geometry for checking the playground works with no assets at all. */
 export function createTestCube(): THREE.Object3D {
   const mesh = new THREE.Mesh(

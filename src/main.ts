@@ -131,7 +131,7 @@ function clearScene(): void {
 
 // ── Wiring ─────────────────────────────────────────────────────────────
 
-createTransformTools(viewport, () => {
+const tools = createTransformTools(viewport, () => {
   const selected = getSelected()
   if (selected) removeById(selected.id)
 })
@@ -158,7 +158,7 @@ const hooks: PanelHooks = {
   },
 }
 
-const panel = createPanel(viewport, background, hooks)
+const panel = createPanel(viewport, background, tools, hooks)
 
 subscribe(autosave)
 background.subscribe(autosave)
