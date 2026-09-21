@@ -37,7 +37,7 @@ function manifest(): string {
 // exists to support.
 function assetManifest(): Plugin {
   return {
-    name: 'playanegra-asset-manifest',
+    name: 'constructor-3d-asset-manifest',
 
     configureServer(server) {
       server.middlewares.use(MANIFEST_URL, (_req, res) => {

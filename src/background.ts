@@ -13,7 +13,7 @@ export type BackgroundSettings = {
    * for a true 2:1 panorama, which already knows where its own horizon is.
    */
   horizon: number
-  /** 0 = sharp, 1 = fully blurred. Useful for pushing a backdrop behind the garments. */
+  /** 0 = sharp, 1 = fully blurred. Useful for pushing a backdrop behind the models. */
   blur: number
   /** Brightness multiplier on the backdrop only. */
   intensity: number

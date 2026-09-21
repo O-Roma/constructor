@@ -3,7 +3,7 @@ import type { Viewport } from './scene.ts'
 import { getModels, type ModelOrigin, type Transform } from './scene-store.ts'
 import { readTransform } from './snippet.ts'
 
-const STORAGE_KEY = 'playanegra.scene.v1'
+const STORAGE_KEY = 'constructor3d.scene.v1'
 
 export type SavedModel = {
   id: string

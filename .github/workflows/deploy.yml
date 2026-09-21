@@ -1,0 +1,46 @@
+# Publishes the playground to GitHub Pages on every push to main.
+# Pages has to be set to "GitHub Actions" once in Settings → Pages for this to run.
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# A queued run waits for the one in flight rather than cancelling it, so a
+# half-finished deploy never becomes the live site.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      # A project page lives under /<repo>/, so the base path is set here rather
+      # than in vite.config.ts, which would push dev onto the same sub-path.
+      - run: npx vite build --base=/${{ github.event.repository.name }}/
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

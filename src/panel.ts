@@ -349,7 +349,7 @@ export function createPanel(
       nodes.push(el('div', 'warn', `⚠ ${selected.unitWarning}`))
     }
 
-    // Size before the raw scale factors: how many metres across a garment is
+    // Size before the raw scale factors: how many metres across a model is
     // the question we are actually asking, and a scale of 1.4 answers it only if
     // you already remember what the model was exported at.
     const sizeGroup = el('div', 'field compact')

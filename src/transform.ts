@@ -34,7 +34,7 @@ export function createTransformTools(viewport: Viewport, onRemoveSelected: () =>
   })
 
   // ── Proportional scaling ─────────────────────────────────────────────
-  // On by default: a garment stretched on one axis only is almost always a
+  // On by default: a model stretched on one axis only is almost always a
   // mistake, and the axis handles are far easier to grab than the centre box
   // that scales uniformly.
   let proportional = true

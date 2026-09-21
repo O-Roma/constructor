@@ -1,11 +1,9 @@
-# playanegra
+# constructor 3d
 
-Website for the **playanegra** clothing brand.
-
-Right now it is only a **3D playground**: a scene where you add GLB models, drag them
-around until the composition works, and then read the exact coordinates back out of the
-side panel so they can be hardcoded into the real site later. The playground is the
-authoring tool; the numbers it produces are the point of it.
+A **3D playground**: a scene where you add GLB models, drag them around until the
+composition works, and then read the exact coordinates back out of the side panel so they
+can be hardcoded into the site that will use them. The playground is the authoring tool;
+the numbers it produces are the point of it.
 
 ## Running it
 
@@ -69,7 +67,7 @@ with the page, so after a reload they come back as a greyed "re-drop X" row that
 holds its transform.
 
 Models load at **native scale**. Auto-fitting each one (as situ-web does for its single
-model) would destroy the relative sizes between garments, which is most of what we are
+model) would destroy the relative sizes between models, which is most of what we are
 trying to judge here. A model whose largest dimension is above 50 or below 0.05 gets a
 unit warning in the panel instead.
 
@@ -88,7 +86,7 @@ when it is merely rotated.
 **Lock proportions** (on by default, `L`) keeps the three scale axes in step: a gizmo
 scale drag on any handle applies the ratio of the axis that moved furthest to all three,
 and typing in one scale field does the same. Non-uniform scaling is still available with
-the lock off, but stretching a garment on one axis is nearly always a mistake.
+the lock off, but stretching a model on one axis is nearly always a mistake.
 
 Scaling happens about the object's origin, so a resized model usually needs **Sit on
 ground** afterwards.

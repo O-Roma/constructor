@@ -23,9 +23,12 @@ import {
  */
 const DEFAULT_BACKGROUND = { file: 'playa.jpeg', horizon: 0.42 }
 
-const MODELS_URL_PREFIX = '/models/'
-const BACKGROUNDS_URL_PREFIX = '/backgrounds/'
-const MANIFEST_URL = '/asset-manifest.json'
+// Everything is addressed through Vite's base path so the build also works when
+// it is served from a sub-path, as GitHub Pages does.
+const BASE = import.meta.env.BASE_URL
+const MODELS_URL_PREFIX = `${BASE}models/`
+const BACKGROUNDS_URL_PREFIX = `${BASE}backgrounds/`
+const MANIFEST_URL = `${BASE}asset-manifest.json`
 
 const canvas = document.getElementById('viewport')
 if (!(canvas instanceof HTMLCanvasElement)) throw new Error('missing #viewport canvas')

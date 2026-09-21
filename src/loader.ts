@@ -20,7 +20,7 @@ export async function loadGltf(url: string): Promise<THREE.Object3D> {
 /**
  * Models are loaded at their NATIVE scale, unlike situ-web which fits its single
  * model into a fixed box. Auto-fitting each model here would destroy the
- * relative sizes between garments, which is most of what we are trying to judge.
+ * relative sizes between models, which is most of what we are trying to judge.
  * The cost is that a badly exported model can arrive in centimetres or inches,
  * so we flag it instead of silently correcting it.
  */
@@ -60,7 +60,7 @@ export function nextSpot(index: number): [number, number] {
  *
  * `Box3.setFromObject` measures in world space, so it grows when the model is
  * rotated and shrinks when it is scaled — useless as a stable reading of how big
- * the garment is. Neutralising the root transform for the measurement gives the
+ * the model is. Neutralising the root transform for the measurement gives the
  * size the model was exported at, which multiplied by the scale is the size we
  * actually want to show.
  */
