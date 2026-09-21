@@ -3,6 +3,7 @@ import type { BackgroundController } from './background.ts'
 import { measureLocal } from './loader.ts'
 import type { Viewport } from './scene.ts'
 import type { TransformTools } from './transform.ts'
+import type { AssetKind } from './uploads.ts'
 import {
   getModels,
   getSelected,
@@ -13,16 +14,32 @@ import {
 } from './scene-store.ts'
 import { buildSnippet, copyToClipboard } from './snippet.ts'
 
+/** One file the panel can offer, whether it ships with the site or was uploaded. */
+export type LibraryEntry = {
+  name: string
+  /** Where to fetch it: a path under the site, or a Blob URL. */
+  url: string
+  /** True for an uploaded file, which everyone opening the site can also see. */
+  remote: boolean
+}
+
+export type Library = {
+  models: LibraryEntry[]
+  backgrounds: LibraryEntry[]
+  /** False when the deployment has no Blob store or no upload password set. */
+  uploads: boolean
+}
+
 export type PanelHooks = {
-  /** Loads a model from public/models by file name. */
-  addFromLibrary(fileName: string): void
-  /** Loads a backdrop from public/backgrounds by file name. */
-  setBackgroundFromLibrary(fileName: string): void
+  addFromLibrary(entry: LibraryEntry): void
+  setBackgroundFromLibrary(entry: LibraryEntry): void
   addTestCube(): void
   removeModel(id: string): void
   clearScene(): void
-  /** Re-reads the manifest; resolves with the file names found in each folder. */
-  listLibrary(): Promise<{ models: string[]; backgrounds: string[] }>
+  /** Re-reads both the bundled files and the uploaded ones. */
+  listLibrary(): Promise<Library>
+  /** Sends a file to the shared library. Rejects if the password is wrong. */
+  upload(file: File, kind: AssetKind): Promise<void>
 }
 
 type Axis = 'x' | 'y' | 'z'
@@ -90,41 +107,100 @@ export function createPanel(
 
   // ── Library ──────────────────────────────────────────────────────────
   function pickerRows(
-    files: string[],
+    entries: LibraryEntry[],
     emptyHint: string,
     action: string,
-    onPick: (file: string) => void,
-    activeFile?: string,
+    onPick: (entry: LibraryEntry) => void,
+    activeName?: string,
   ): HTMLElement[] {
-    if (files.length === 0) return [el('div', 'muted', emptyHint)]
+    if (entries.length === 0) return [el('div', 'muted', emptyHint)]
 
-    return files.map((file) => {
+    return entries.map((entry) => {
       const row = el('div', 'item')
-      if (file === activeFile) row.classList.add('selected')
-      row.append(el('span', 'item-name', file))
-      row.append(el('span', 'item-id', file === activeFile ? 'in use' : action))
-      row.addEventListener('click', () => onPick(file))
+      if (entry.name === activeName) row.classList.add('selected')
+      const name = el('span', 'item-name', entry.name)
+      // Where a file actually comes from only matters when something is wrong,
+      // so it lives in the tooltip rather than taking up a column.
+      name.title = entry.remote ? `uploaded · ${entry.url}` : entry.url
+      row.append(name)
+      // Uploaded files are the ones every visitor sees, which is worth saying
+      // out loud next to ones that merely sit in this checkout.
+      if (entry.remote) row.append(el('span', 'tag', 'shared'))
+      row.append(el('span', 'item-id', entry.name === activeName ? 'in use' : action))
+      row.addEventListener('click', () => onPick(entry))
       return row
     })
   }
 
+  // Upload buttons are hidden until the library tells us the deployment can
+  // actually take one, so `vite dev` never offers a button that cannot work.
+  const uploadButtons = [
+    { button: must<HTMLButtonElement>('library-upload'), kind: 'models' as AssetKind },
+    { button: must<HTMLButtonElement>('background-upload'), kind: 'backgrounds' as AssetKind },
+  ]
+
   async function refreshLibrary(): Promise<void> {
-    libraryList.replaceChildren(el('div', 'muted', 'reading public/models…'))
-    const { models, backgrounds } = await hooks.listLibrary()
+    libraryList.replaceChildren(el('div', 'muted', 'reading the library…'))
+    const { models, backgrounds, uploads } = await hooks.listLibrary()
+
+    for (const { button } of uploadButtons) button.hidden = !uploads
 
     libraryList.replaceChildren(
-      ...pickerRows(models, 'public/models is empty — drop a .glb on the canvas', 'add', hooks.addFromLibrary),
+      ...pickerRows(models, 'nothing here yet — drop a .glb on the canvas', 'add', hooks.addFromLibrary),
     )
     backgroundList.replaceChildren(
       ...pickerRows(
         backgrounds,
-        'public/backgrounds is empty — drop an image on the canvas',
+        'nothing here yet — drop an image on the canvas',
         'use',
         hooks.setBackgroundFromLibrary,
         background.getImage()?.name,
       ),
     )
   }
+
+  const ACCEPT: Record<AssetKind, string> = {
+    models: '.glb,.gltf',
+    backgrounds: '.jpg,.jpeg,.png,.webp,.avif,.hdr',
+  }
+
+  function pickAndUpload(kind: AssetKind, list: HTMLElement): void {
+    const input = el('input')
+    input.type = 'file'
+    input.accept = ACCEPT[kind]
+    input.multiple = true
+
+    input.addEventListener('change', async () => {
+      const files = [...(input.files ?? [])]
+      if (files.length === 0) return
+
+      // One status line per list, so a second attempt replaces the first
+      // instead of stacking old failures under the new one.
+      for (const stale of list.querySelectorAll('.upload-status')) stale.remove()
+      const status = el('div', 'muted upload-status', '')
+      list.append(status)
+
+      for (const file of files) {
+        status.textContent = `uploading ${file.name}…`
+        try {
+          await hooks.upload(file, kind)
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error)
+          if (message === 'cancelled') break
+          status.className = 'warn upload-status'
+          status.textContent = `${file.name}: ${message}`
+          return
+        }
+      }
+
+      await refreshLibrary()
+    })
+
+    input.click()
+  }
+
+  uploadButtons[0].button.addEventListener('click', () => pickAndUpload('models', libraryList))
+  uploadButtons[1].button.addEventListener('click', () => pickAndUpload('backgrounds', backgroundList))
 
   // ── Background controls ──────────────────────────────────────────────
   function slider(

@@ -231,6 +231,15 @@
         grid-template-columns: 34px 1fr auto;
       }
 
+      /* Marks a row that lives in the shared library rather than this checkout. */
+      .tag {
+        flex: 0 0 auto;
+        color: var(--accent);
+        font-size: 9px;
+        letter-spacing: 0.04em;
+        text-transform: uppercase;
+      }
+
       .unit {
         color: var(--muted);
         font-size: 10px;
@@ -358,7 +367,8 @@
         <section>
           <div class="row spread">
             <h2>Library</h2>
-            <button id="library-refresh" class="icon" title="Re-read public/models">↻</button>
+            <button id="library-upload" class="icon" title="Upload a model to the shared library" hidden>↑</button>
+            <button id="library-refresh" class="icon" title="Re-read the library">↻</button>
           </div>
           <div id="library-list"></div>
           <div class="row" style="margin-top: 6px">
@@ -369,6 +379,7 @@
         <section>
           <div class="row spread">
             <h2>Background</h2>
+            <button id="background-upload" class="icon" title="Upload a backdrop to the shared library" hidden>↑</button>
             <button id="background-clear" class="icon" title="Remove the backdrop">×</button>
           </div>
           <div id="background-list"></div>

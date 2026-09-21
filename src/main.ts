@@ -1,9 +1,10 @@
 import { createBackground } from './background.ts'
-import { createPanel, type PanelHooks } from './panel.ts'
+import { createPanel, type LibraryEntry, type PanelHooks } from './panel.ts'
 import { applyCamera, applyTransform, clearSavedScene, createAutosave, loadScene } from './persist.ts'
 import { createTestCube, describeUnits, disposeObject, loadGltf, nextSpot, placeOnGround } from './loader.ts'
 import { createViewport } from './scene.ts'
 import { createTransformTools } from './transform.ts'
+import { listRemote, uploadAsset, type AssetKind } from './uploads.ts'
 import {
   addModel,
   clearModels,
@@ -70,9 +71,8 @@ async function addGltf(name: string, src: string, url: string, origin: SceneMode
   }
 }
 
-function addFromLibrary(fileName: string): void {
-  const src = MODELS_URL_PREFIX + encodeURIComponent(fileName)
-  void addGltf(fileName, src, src, 'library')
+function addFromLibrary(entry: LibraryEntry): void {
+  void addGltf(entry.name, entry.url, entry.url, 'library')
 }
 
 function addDroppedFile(file: File): void {
@@ -94,9 +94,8 @@ function setBackground(name: string, src: string, url: string, origin: 'library'
   })
 }
 
-function setBackgroundFromLibrary(fileName: string): void {
-  const src = BACKGROUNDS_URL_PREFIX + encodeURIComponent(fileName)
-  setBackground(fileName, src, src, 'library')
+function setBackgroundFromLibrary(entry: LibraryEntry): void {
+  setBackground(entry.name, entry.url, entry.url, 'library')
 }
 
 function setDroppedBackground(file: File): void {
@@ -143,6 +142,37 @@ function stringList(value: unknown): string[] {
   return Array.isArray(value) ? value.filter((entry): entry is string => typeof entry === 'string') : []
 }
 
+/** The files committed to public/, as the Vite plugin reports them. */
+async function listBundled(): Promise<{ models: LibraryEntry[]; backgrounds: LibraryEntry[] }> {
+  const entry = (prefix: string) => (name: string): LibraryEntry => ({
+    name,
+    url: prefix + encodeURIComponent(name),
+    remote: false,
+  })
+
+  try {
+    const response = await fetch(MANIFEST_URL, { cache: 'no-store' })
+    if (!response.ok) return { models: [], backgrounds: [] }
+    const manifest = (await response.json()) as { models?: unknown; backgrounds?: unknown }
+    return {
+      models: stringList(manifest.models).map(entry(MODELS_URL_PREFIX)),
+      backgrounds: stringList(manifest.backgrounds).map(entry(BACKGROUNDS_URL_PREFIX)),
+    }
+  } catch {
+    return { models: [], backgrounds: [] }
+  }
+}
+
+/**
+ * A bundled file wins over an uploaded one of the same name: it is served from
+ * the same origin, so it loads faster and works offline, and while developing
+ * it is the copy you are actually editing.
+ */
+function merge(bundled: LibraryEntry[], remote: LibraryEntry[]): LibraryEntry[] {
+  const names = new Set(bundled.map((entry) => entry.name))
+  return [...bundled, ...remote.filter((entry) => !names.has(entry.name))]
+}
+
 const hooks: PanelHooks = {
   addFromLibrary,
   setBackgroundFromLibrary,
@@ -150,15 +180,20 @@ const hooks: PanelHooks = {
   removeModel: removeById,
   clearScene,
   async listLibrary() {
-    try {
-      const response = await fetch(MANIFEST_URL, { cache: 'no-store' })
-      if (!response.ok) return { models: [], backgrounds: [] }
-      const manifest = (await response.json()) as { models?: unknown; backgrounds?: unknown }
-      return { models: stringList(manifest.models), backgrounds: stringList(manifest.backgrounds) }
-    } catch {
-      return { models: [], backgrounds: [] }
+    const [bundled, remote] = await Promise.all([listBundled(), listRemote()])
+    return {
+      models: merge(bundled.models, remote.models.map(asRemote)),
+      backgrounds: merge(bundled.backgrounds, remote.backgrounds.map(asRemote)),
+      uploads: remote.uploads,
     }
   },
+  async upload(file: File, kind: AssetKind) {
+    await uploadAsset(file, kind)
+  },
+}
+
+function asRemote(asset: { name: string; url: string }): LibraryEntry {
+  return { ...asset, remote: true }
 }
 
 const panel = createPanel(viewport, background, tools, hooks)

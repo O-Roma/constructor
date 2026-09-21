@@ -43,6 +43,10 @@ Everything in `src/` is flat, one concern per file:
 | `panel.ts` | The side panel: camera readout, library, model list, numeric fields. |
 | `snippet.ts` | Scene state → the copyable TypeScript block. |
 | `persist.ts` | localStorage autosave and restore. |
+| `uploads.ts` | Talking to the shared Blob library: listing it, and uploading to it. |
+
+Plus `api/`, two Vercel serverless functions: `upload.ts` (checks the password, mints a
+client token) and `assets.ts` (lists the store).
 
 ### The one rule worth knowing
 
@@ -90,6 +94,33 @@ the lock off, but stretching a model on one axis is nearly always a mistake.
 
 Scaling happens about the object's origin, so a resized model usually needs **Sit on
 ground** afterwards.
+
+## The shared library
+
+Three routes get a file into the scene, and they are deliberately different things:
+
+- **Dropped** on the canvas — a blob URL in one tab. Dies on reload, which is why those
+  rows come back as "re-drop X".
+- **Bundled** in `public/` — served from the site's own origin, listed by the Vite plugin.
+- **Uploaded** — lives in Vercel Blob, listed by `/api/assets`, shown with a *shared* tag
+  and visible to everyone.
+
+A bundled file wins over an uploaded one of the same name: same origin, and in development
+it is the copy actually being edited.
+
+Uploads go **from the browser straight to Blob storage**. `api/upload.ts` only validates
+and mints a client token, because a serverless request body tops out at 4.5 MB and models
+go well past that.
+
+The password is checked by an explicit `{ type: 'password-check' }` request before any
+bytes move. This looks redundant — `onBeforeGenerateToken` rejects a bad password anyway —
+but `@vercel/blob`'s client discards the body of a failed token request, so every refusal
+would otherwise reach the user as "failed to retrieve the client token". The token path
+still re-checks: the browser is not the only thing that can post there. Don't collapse
+the two.
+
+Uploads are refused outright when `UPLOAD_PASSWORD` is unset, so a deployment is never
+accidentally an open write endpoint.
 
 ## The background
 

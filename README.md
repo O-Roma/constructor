@@ -33,12 +33,40 @@ Vite + vanilla TypeScript + three.js. No framework.
 
 ## Assets
 
-Drop `.glb` / `.gltf` files into `public/models/` and backdrop images into
-`public/backgrounds/`; they appear in the panel without a restart. Both folders are
-git-ignored, since the files are large binaries — a fresh clone starts empty.
+There are three ways a file gets into the scene:
+
+- **Drag it onto the canvas.** Works everywhere, including the deployed site. The file is
+  read in your browser and never leaves it, so it is gone on reload and nobody else sees
+  it. Good for a quick look.
+- **Put it in `public/models/` or `public/backgrounds/`.** It appears in the panel without
+  a restart and is bundled into the build. Both folders are git-ignored, since the files
+  are large binaries — a fresh clone starts empty.
+- **Upload it** with the ↑ button next to the library. The file goes to Vercel Blob and
+  shows up, marked *shared*, for everyone who opens the site. This is the only route that
+  is both permanent and visible to other people.
+
+Uploading needs two things set on the deployment, and the button stays hidden until both
+are there:
+
+| | |
+| --- | --- |
+| A Blob store | Vercel dashboard → Storage → create a Blob store and connect it to the project. That sets `BLOB_READ_WRITE_TOKEN` for you. |
+| `UPLOAD_PASSWORD` | An environment variable you choose. Anyone who has it can upload; without it set, uploads are refused outright rather than left open to the internet. |
+
+The browser asks for that password on the first upload and remembers it. Uploads go
+straight from the browser to Blob storage — the serverless function only checks the
+password and hands back a token, so a 200 MB model is not squeezed through a request
+body.
+
+Locally, `/api` does not exist under `npm run dev`, so the upload buttons stay hidden and
+the library shows whatever is in `public/`. Use `vercel dev` to exercise the real thing.
 
 ## Publishing
 
-Pushing to `main` builds the site and deploys it to GitHub Pages
-(`.github/workflows/deploy.yml`). Set **Settings → Pages → Source** to *GitHub Actions*
-once and it runs on its own.
+The site is deployed by Vercel on every push to `main`; the serverless functions in
+`api/` come along with it.
+
+`.github/workflows/deploy.yml` also publishes to GitHub Pages, which needs
+**Settings → Pages → Source** set to *GitHub Actions*. Pages serves static files only, so
+the upload buttons will not appear there — that build is the playground with whatever is
+committed under `public/`.
